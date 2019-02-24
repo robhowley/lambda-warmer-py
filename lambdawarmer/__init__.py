@@ -5,7 +5,6 @@ import time
 import boto3
 import logging
 import functools
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -17,15 +16,11 @@ LAMBDA_INFO = {
 
 def invoke_lambda(parameter_tuple):
     lambda_client, function_name, invocation_type_string, payload = parameter_tuple
-    start = datetime.utcnow()
-    thread_int = payload['__WARMER_INVOCATION__']
-    print('start ', thread_int)
     lambda_client.invoke(
         FunctionName=function_name,
         InvocationType=invocation_type_string,
         Payload=json.dumps(payload)
     )
-    print('runtime for ', thread_int, (datetime.utcnow() - start).total_seconds())
 
 
 def warmer(configuration=None, lambda_client=None, logger=None):

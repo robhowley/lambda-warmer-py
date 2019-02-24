@@ -6,6 +6,7 @@ from collections import namedtuple
 
 class TestWarmerFanOut(unittest.TestCase):
     def setUp(self):
+        from lambdawarmer import LAMBDA_INFO
 
         class FakeLogger(object):
             def __init__(self):
@@ -22,8 +23,8 @@ class TestWarmerFanOut(unittest.TestCase):
                 assert FunctionName is not None and InvocationType in ['Event', 'RequestResponse', 'DryRun']
                 self.calls.append(dict(function_name=FunctionName, invoke_type=InvocationType, payload=Payload))
 
-        self.get_fake_logger = lambda: FakeLogger()
-        self.get_fake_lambda_client = lambda: FakeLambdaClient()
+        self.get_fake_logger = FakeLogger
+        self.get_fake_lambda_client = FakeLambdaClient
         self.get_context = lambda req_id='123': namedtuple('Context', 'aws_request_id')(req_id)
 
         self.warmer_invocation_event = dict(warmer=True, concurrency=3)
@@ -46,6 +47,8 @@ class TestWarmerFanOut(unittest.TestCase):
             pass
 
         self.decorared_dummy_lambda = dummy_lambda
+
+        LAMBDA_INFO['is_warm'] = False
 
     def test_warmer_fan_out(self):
         from lambdawarmer import LAMBDA_INFO

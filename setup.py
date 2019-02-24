@@ -11,7 +11,7 @@ setuptools.setup(
     description='keep lambdas warm and monitor cold starts with a simple decorator',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/pypa/sampleproject',
+    url='https://github.com/robhowley/lambda-warmer-py',
     packages=setuptools.find_packages(),
     classifiers=[
         'Programming Language :: Python :: 3',
