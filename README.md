@@ -50,9 +50,21 @@ periodically invokes your lambda directly and passes the following json as the e
 ```bash
 {
     "warmer": true,
-    "concurrency": (int, defaults to 3)
+    "concurrency": (int, defaults to 1)
 }
 ```
-It is possible to change the `warmer` and `concurrency` names by overriding parameters in the `warmer` decorator.
+It is possible to change the `warmer` and `concurrency` names by overriding parameters in the `warmer` decorator. See
+[configuration](#configuration) for details.
 
 ## Configuration
+The lambda warmer is configured via the function parameters for the `@warmer` decorator. It takes the following ...
+
+### `flag (string, default = 'warmer')`
+Name of the field used to indicate that it is a warm up event.
+
+### `concurrency (string, default = 'concurrency')`
+Name of the field used to set the number of concurrent lambdas to invoke and keep warm.
+
+### `delay (string, int = 1)`
+Number of millis a concurrent warm up invocation should sleep. This helps avoid under delivering on
+  the concurrency target.
