@@ -12,11 +12,13 @@ warmer_logger = logging.getLogger(__name__)
 
 LAMBDA_INFO = {
     'is_warm': False,
-    'function_name': os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'FAILED_TO_RETRIEVE_LAMBDA_NAME')
+    'function_name': os.getenv('AWS_LAMBDA_FUNCTION_NAME', 'FAILED_TO_RETRIEVE_LAMBDA_NAME')
 }
 
 
 def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False, **decorator_kwargs):
+
+    config = dict(flag=flag, concurrency=concurrency, delay=delay, send_metric=send_metric)
 
     # should only really be used in unittests w fake client
     get_client = decorator_kwargs.pop('get_client', None) or boto3.client
@@ -26,65 +28,61 @@ def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False
         @functools.wraps(f)
         def wrapped_func(event, context, *args, **kwargs):
 
-            config = dict(
-                flag=flag,                              # default event key for flag indicating a warmer invocation
-                concurrency=concurrency,                # default event key for concurrency settings
-                delay=delay,                            # default the delay to 75ms
-                correlation_id=context.aws_request_id   # default the shared id to the request id of source lamdba
+            execution_info = dict(
+                instance_id=context.aws_request_id,
+                is_warmer_invocation=event.get(flag) or False,
+                **LAMBDA_INFO
             )
 
             log_current_state(
-                config['correlation_id'],
                 send_metric,
-                is_warmer_invocation=event.get(flag),
                 cloudwatch_client=get_client('cloudwatch'),
-                logger=logger
+                logger=logger,
+                **execution_info
             )
 
-            warmer_fan_out(event, config=config, lambda_client=get_client('lambda'), logger=logger)
+            LAMBDA_INFO['is_warm'] = True
+
+            warmer_fan_out(event, config=config, lambda_client=get_client('lambda'), logger=logger, **execution_info)
 
             return f(event, context, *args, **kwargs)
         return wrapped_func
     return decorator
 
 
-def log_current_state(correlation_id, send_metric, is_warmer_invocation, logger=None, cloudwatch_client=None):
+def log_current_state(send_metric, logger=None, cloudwatch_client=None, **execution_info):
     logger = logger or warmer_logger
-    logger.info(dict(correlation_id=correlation_id, is_warmer_invocation=is_warmer_invocation, **LAMBDA_INFO))
+    logger.info(execution_info)
 
     if send_metric:
         cloudwatch_client = cloudwatch_client or boto3.client('cloudwatch')
         cloudwatch_client.put_metric_data(
-            Namespace='Lambda',
+            Namespace='LambdaWarmer',
             MetricData=[dict(
-                Name='ColdStart',
-                Value=int(not LAMBDA_INFO['is_warm']),
-                Unit='None'
+                MetricName='WarmStart' if execution_info['is_warm'] else 'ColdStart',
+                Dimensions=[dict(Name='By Function Name', Value=execution_info['function_name'])],
+                Unit='None',
+                Value=1
             )]
         )
 
 
-def warmer_fan_out(event, config=None, lambda_client=None, logger=None):
+def warmer_fan_out(event, config=None, lambda_client=None, logger=None, **execution_info):
 
     logger = logger or warmer_logger
 
-    state_at_invocation = LAMBDA_INFO['is_warm']
-    LAMBDA_INFO['is_warm'] = True
-
-    if event.get(config['flag']):
+    if execution_info['is_warmer_invocation']:
         concurrency = max(event.get(config['concurrency']), 1)
         invoke_count = event.get('__WARMER_INVOCATION__') or 1
         invoke_total = event.get('__WARMER_CONCURRENCY__') or concurrency
-        correlation_id = event.get('__WARMER_CORRELATION_ID__') or config['correlation_id']
+        correlation_id = event.get('__WARMER_CORRELATION_ID__') or execution_info['instance_id']
 
         logger.info(dict(
-            is_warmer_invocation=True,
-            function=LAMBDA_INFO['function_name'],
-            instance_id=config['correlation_id'],
+            action='warmer',
             correlation_id=correlation_id,
             count=invoke_count,
             concurrency=invoke_total,
-            is_warm=state_at_invocation
+            **execution_info
         ))
 
         if concurrency > 1:
