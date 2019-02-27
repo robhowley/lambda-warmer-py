@@ -14,7 +14,7 @@ LAMBDA_INFO = {
 }
 
 
-def warmer(flag='warmer', concurrency='concurrency', **decorator_kwargs):
+def warmer(flag='warmer', concurrency='concurrency', delay=75, **decorator_kwargs):
 
     # should only really be used in unittests w fake client
     lambda_client = decorator_kwargs.pop('lambda_client', None)
@@ -26,10 +26,9 @@ def warmer(flag='warmer', concurrency='concurrency', **decorator_kwargs):
 
             config = dict(
                 flag=flag,                              # default event key for flag indicating a warmer invocation
-                concurrency=concurrency,                # default event key for flag indicating a test invocation
-                test='test',                            # default event key for concurrency setting
-                correlation_id=context.aws_request_id,  # default the shared id to the request id of source lamdba
-                delay=75                                # default the delay to 75ms
+                concurrency=concurrency,                # default event key for concurrency settings
+                delay=delay,                            # default the delay to 75ms
+                correlation_id=context.aws_request_id   # default the shared id to the request id of source lamdba
             )
 
             warmer_fan_out(event, config=config, lambda_client=lambda_client, logger=logger)
