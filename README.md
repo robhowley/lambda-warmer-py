@@ -9,14 +9,13 @@ starts. Just ...
   2. ping your lambda once every 5 minutes
 
 and you'll cut your cold starts way down. Configuration options are also available that allow for keeping many *concurrent*
-lambdas warm simultaneously.
+lambdas warm.
 
 This is a python adaption* of the `npm` [package](https://github.com/jeremydaly/lambda-warmer) `lambda-warmer` by 
 Jeremy Daly. Read more about the background to this approach on his site [here](https://www.jeremydaly.com/lambda-warmer-optimize-aws-lambda-function-cold-starts/)
-and some [best practices](https://www.jeremydaly.com/15-key-takeaways-from-the-serverless-talk-at-aws-startup-day/) on 
-lambda optimization here.
+and some best practices on lambda optimization [here](https://www.jeremydaly.com/15-key-takeaways-from-the-serverless-talk-at-aws-startup-day/).
 
-\* There are definitely some differences. See [configuration](#configuration).
+\* There are some small differences. See [configuration](#configuration).
   
 
 ## Install
@@ -68,3 +67,22 @@ Name of the field used to set the number of concurrent lambdas to invoke and kee
 ### `delay (string, int = 75)`
 Number of millis a concurrent warm up invocation should sleep. This helps avoid under delivering on
   the concurrency target.
+  
+#### Example of configuration overrides
+Using alternative event and delay configurations is straightforward.
+```bash
+@lambdawarmer.warmer(flag='am_i_a_warmer', concurrency='how_many_lambdas', delay=150)
+def your_lambda_function(event, context):
+    pass
+```
+This implementation will expect events of the form
+```bash
+{"am_i_a_warmer": true, "how_many_lambdas": (int)}
+```
+and all concurrent executions will delay for 150 milliseconds.
+
+*Note*: Configuration options that are *excluded* from this implementation but can be found in the `js` version are 
+* `test`: Testing is handled in the unittests using mocks/fakes instead of flagged invocations
+* `log`: Logging levels of imported python  packages should be handled via the stdlib `logging` module. 
+* `correlationId`. This has been made into the snake cased `correlation_id` since we're in python and is always set to 
+the current lambda's `aws_request_id` field as is recommended in the original `lambda-warmer` package.
