@@ -72,9 +72,8 @@ Number of millis a concurrent warm up invocation should sleep. This helps avoid 
   the concurrency target.
   
 ### `send_metric (bool, default = False)`
-Whether or not CloudWatch Metrics for the number of cold/warm starts will be sent at each invocation. The metrics are
-recorded under `LambdaWarmer` namespace, can be filtered by lambda function name and will be named `ColdStart` and 
-`WarmStart`.
+Whether or not CloudWatch Metrics for the number of cold/warm starts will be sent at each invocation. The metrics names
+are `ColdStart` and `WarmStart`, are recorded under `LambdaWarmer` namespace, and can be filtered by lambda function name.
   
 #### Example of configuration overrides
 Using alternative event and delay configurations is straightforward.
