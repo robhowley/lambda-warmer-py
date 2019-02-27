@@ -1,31 +1,15 @@
 import json
 import unittest
 from lambdawarmer import warmer
-from collections import namedtuple
+from lambdawarmer.fakes import get_context, get_client
 
 
 class TestWarmerFanOut(unittest.TestCase):
     def setUp(self):
         from lambdawarmer import LAMBDA_INFO
+        from lambdawarmer.fakes import FakeLogger
 
-        class FakeLogger(object):
-            def __init__(self):
-                self.kept_logs = []
-
-            def info(self, s):
-                self.kept_logs.append(s)
-
-        class FakeLambdaClient(object):
-            def __init__(self):
-                self.calls = []
-
-            def invoke(self, FunctionName, InvocationType, Payload=None):
-                assert FunctionName is not None and InvocationType in ['Event', 'RequestResponse', 'DryRun']
-                self.calls.append(dict(function_name=FunctionName, invoke_type=InvocationType, payload=Payload))
-
-        self.get_fake_logger = FakeLogger
-        self.get_fake_lambda_client = FakeLambdaClient
-        self.get_context = lambda req_id='123': namedtuple('Context', 'aws_request_id')(req_id)
+        self.lambda_client, self.logger = get_client('lambda'), FakeLogger()
 
         self.warmer_invocation_event = dict(warmer=True, concurrency=3)
 
@@ -40,9 +24,12 @@ class TestWarmerFanOut(unittest.TestCase):
             }
         }
 
-        self.lambda_client, self.logger = self.get_fake_lambda_client(), self.get_fake_logger()
+        self.to_metric = lambda v: {
+            'Namespace': 'Lambda',
+            'MetricData': [{'Unit': 'None', 'Value': v, 'Name': 'ColdStart'}]
+        }
 
-        @warmer(lambda_client=self.lambda_client, logger=self.logger)
+        @warmer(get_client=get_client, logger=self.logger)
         def dummy_lambda(event, context):
             pass
 
@@ -55,14 +42,14 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.assertFalse(LAMBDA_INFO['is_warm'])
 
-        self.decorared_dummy_lambda(self.warmer_invocation_event, self.get_context())
+        self.decorared_dummy_lambda(self.warmer_invocation_event, get_context())
 
         self.assertTrue(LAMBDA_INFO['is_warm'])
 
         self.assertDictEqual(
-            self.logger.kept_logs[0],
+            self.logger.kept_logs[1],
             {
-                'action': 'warmer',
+                'is_warmer_invocation': True,
                 'concurrency': self.warmer_invocation_event['concurrency'],
                 'correlation_id': '123',
                 'count': 1,
@@ -80,30 +67,47 @@ class TestWarmerFanOut(unittest.TestCase):
         )
 
     def test_if_not_warmer_do_not_bother(self):
-        self.decorared_dummy_lambda({}, self.get_context())
-        self.assertTrue(len(self.logger.kept_logs) == 0)
+        self.decorared_dummy_lambda({}, get_context())
+        self.assertTrue(len(self.logger.kept_logs) == 1)
         self.assertTrue(len(self.lambda_client.calls) == 0)
 
     def test_fan_out_call_does_not_fan_out_more(self):
         invoke_call = self.to_invoke_call(2)
-        self.decorared_dummy_lambda(invoke_call['payload'], self.get_context())
-        self.assertTrue(len(self.logger.kept_logs) == 1)
+        self.decorared_dummy_lambda(invoke_call['payload'], get_context())
+        print(self.logger.kept_logs)
+        self.assertTrue(len(self.logger.kept_logs) == 2)
         self.assertTrue(len(self.lambda_client.calls) == 0)
 
     def test_event_key_renaming(self):
         from lambdawarmer import LAMBDA_INFO
 
-        @warmer(warmer='not_w', concurrency='not_c', lambda_client=self.lambda_client, logger=self.logger)
+        @warmer(warmer='not_w', concurrency='not_c', get_client=get_client, logger=self.logger)
         def dummy_lambda(event, context):
             pass
 
         self.assertFalse(LAMBDA_INFO['is_warm'])
 
-        dummy_lambda(dict(not_w=True, not_c=2), self.get_context())
+        dummy_lambda(dict(not_w=True, not_c=2), get_context())
 
         self.assertTrue(LAMBDA_INFO['is_warm'])
 
-        print(self.logger.kept_logs)
+    def test_logging_current_state(self):
+
+        @warmer(send_metric=True, get_client=get_client, logger=self.logger)
+        def dummy_lambda(event, context):
+            pass
+
+        fake_cw = get_client('cloudwatch')
+
+        dummy_lambda({}, get_context())
+        self.assertTrue(fake_cw.calls[0], self.to_metric(1))
+        self.assertFalse(self.logger.kept_logs[0]['is_warm'])
+
+        dummy_lambda({}, get_context())
+        self.assertTrue(fake_cw.calls[1], self.to_metric(0))
+        self.assertTrue(self.logger.kept_logs[1]['is_warm'])
+
+        self.assertTrue(len(fake_cw.calls) == 2)
 
 
 if __name__ == '__main__':
