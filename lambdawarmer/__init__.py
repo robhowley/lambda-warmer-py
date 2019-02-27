@@ -14,26 +14,31 @@ LAMBDA_INFO = {
 }
 
 
-def invoke_lambda(parameter_tuple):
-    lambda_client, function_name, invocation_type_string, payload = parameter_tuple
-    lambda_client.invoke(
-        FunctionName=function_name,
-        InvocationType=invocation_type_string,
-        Payload=json.dumps(payload)
-    )
+# def invoke_lambda(parameter_tuple):
+#     lambda_client, function_name, invocation_type_string, payload = parameter_tuple
+#     lambda_client.invoke(
+#         FunctionName=function_name,
+#         InvocationType=invocation_type_string,
+#         Payload=json.dumps(payload)
+#     )
 
 
-def warmer(configuration=None, lambda_client=None, logger=None):
+def warmer(flag='warmer', concurrency='concurrency', **decorator_kwargs):
+
+    # should only really be used in unittests w fake client
+    lambda_client = decorator_kwargs.pop('lambda_client', None)
+    logger = decorator_kwargs.pop('logger', None)
+
     def decorator(f):
         @functools.wraps(f)
         def wrapped_func(event, context, *args, **kwargs):
+
             config = dict(
-                flag='warmer',                          # default event key for flag indicating a warmer invocation
-                concurrency='concurrency',              # default event key for flag indicating a test invocation
+                flag=flag,                              # default event key for flag indicating a warmer invocation
+                concurrency=concurrency,                # default event key for flag indicating a test invocation
                 test='test',                            # default event key for concurrency setting
                 correlation_id=context.aws_request_id,  # default the shared id to the request id of source lamdba
-                delay=75,                               # default the delay to 75ms
-                **(configuration or {})
+                delay=75                                # default the delay to 75ms
             )
 
             warmer_fan_out(event, config=config, lambda_client=lambda_client, logger=logger)
@@ -68,9 +73,17 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None):
 
         LAMBDA_INFO['is_warm'] = True
 
-        if concurrency > 1 and not event.get(config['test']):
+        if concurrency > 1:
             with ThreadPoolExecutor(max_workers=concurrency) as executor:
                 lambda_client = lambda_client or boto3.client('lambda')
+
+                def invoke_lambda(parameter_tuple):
+                    lambda_client, function_name, invocation_type_string, payload = parameter_tuple
+                    lambda_client.invoke(
+                        FunctionName=function_name,
+                        InvocationType=invocation_type_string,
+                        Payload=json.dumps(payload)
+                    )
 
                 base_payload = {
                     config['flag']: True,
@@ -78,13 +91,10 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None):
                     '__WARMER_CORRELATION_ID__': correlation_id
                 }
 
+                to_param_tuple = lambda payload: (lambda_client, LAMBDA_INFO['name'], 'RequestResponse', payload)
+
                 param_iterables = [
-                    (
-                        lambda_client,
-                        LAMBDA_INFO['name'],
-                        'RequestResponse' if i == (concurrency - 1) else 'Event',
-                        dict(base_payload, __WARMER_INVOCATION__=(i + 1))
-                    )
+                    to_param_tuple(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
                     for i in range(1, concurrency)
                 ]
 

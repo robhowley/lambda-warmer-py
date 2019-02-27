@@ -29,9 +29,9 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.warmer_invocation_event = dict(warmer=True, concurrency=3)
 
-        self.to_invoke_call = lambda inv_type, inv_num: {
+        self.to_invoke_call = lambda inv_num: {
             'function_name': 'FAILED_TO_RETRIEVE_LAMBDA_NAME',
-            'invoke_type': inv_type,
+            'invoke_type': 'RequestResponse',
             'payload': {
                 '__WARMER_CORRELATION_ID__': '123',
                 'warmer': True,
@@ -76,7 +76,7 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.assertListEqual(
             self.lambda_client.calls,
-            [self.to_invoke_call('Event', 2), self.to_invoke_call('RequestResponse', 3)]
+            [self.to_invoke_call(2), self.to_invoke_call(3)]
         )
 
     def test_if_not_warmer_do_not_bother(self):
@@ -85,10 +85,25 @@ class TestWarmerFanOut(unittest.TestCase):
         self.assertTrue(len(self.lambda_client.calls) == 0)
 
     def test_fan_out_call_does_not_fan_out_more(self):
-        invoke_call = self.to_invoke_call('Event', 2)
+        invoke_call = self.to_invoke_call(2)
         self.decorared_dummy_lambda(invoke_call['payload'], self.get_context())
         self.assertTrue(len(self.logger.kept_logs) == 1)
         self.assertTrue(len(self.lambda_client.calls) == 0)
+
+    def test_event_key_renaming(self):
+        from lambdawarmer import LAMBDA_INFO
+
+        @warmer(warmer='not_w', concurrency='not_c', lambda_client=self.lambda_client, logger=self.logger)
+        def dummy_lambda(event, context):
+            pass
+
+        self.assertFalse(LAMBDA_INFO['is_warm'])
+
+        dummy_lambda(dict(not_w=True, not_c=2), self.get_context())
+
+        self.assertTrue(LAMBDA_INFO['is_warm'])
+
+        print(self.logger.kept_logs)
 
 
 if __name__ == '__main__':
