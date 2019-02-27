@@ -75,10 +75,10 @@ def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_c
         lambda_client = lambda_client or boto3.client('lambda')
 
         def invoke_lambda(parameter_tuple):
-            lambda_client, function_name, invocation_type_string, payload = parameter_tuple
+            lambda_client, function_name, payload = parameter_tuple
             lambda_client.invoke(
                 FunctionName=function_name,
-                InvocationType=invocation_type_string,
+                InvocationType='RequestResponse',
                 Payload=json.dumps(payload)
             )
 
@@ -88,10 +88,8 @@ def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_c
             '__WARMER_CORRELATION_ID__': correlation_id
         }
 
-        to_param_tuple = lambda payload: (lambda_client, LAMBDA_INFO['name'], 'RequestResponse', payload)
-
         param_iterables = [
-            to_param_tuple(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
+            (lambda_client, LAMBDA_INFO['name'], dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
             for i in range(1, concurrency)
         ]
 
