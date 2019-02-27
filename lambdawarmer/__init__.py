@@ -5,7 +5,6 @@ import time
 import boto3
 import logging
 import functools
-from concurrent.futures import ThreadPoolExecutor
 
 
 LAMBDA_INFO = {
@@ -64,32 +63,26 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None):
         LAMBDA_INFO['is_warm'] = True
 
         if concurrency > 1:
-            _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client)
+            _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client, logger)
         elif invoke_count > 1:
             time.sleep(config['delay'] / 1000.0)        # without delay, you might just get a reused container
 
 
-def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client):
-    with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        lambda_client = lambda_client or boto3.client('lambda')
+def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client, logger):
+    lambda_client = lambda_client or boto3.client('lambda')
 
-        def invoke_lambda(parameter_tuple):
-            lambda_client, function_name, payload = parameter_tuple
+    base_payload = {
+        config['flag']: True,
+        '__WARMER_CONCURRENCY__': concurrency,
+        '__WARMER_CORRELATION_ID__': correlation_id
+    }
+
+    for i in range(1, concurrency):
+        try:
             lambda_client.invoke(
-                FunctionName=function_name,
-                InvocationType='RequestResponse',
-                Payload=json.dumps(payload)
+                FunctionName=LAMBDA_INFO['name'],
+                InvocationType='Event' if i < concurrency - 1 else 'RequestResponse',
+                Payload=json.dumps(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
             )
-
-        base_payload = {
-            config['flag']: True,
-            '__WARMER_CONCURRENCY__': concurrency,
-            '__WARMER_CORRELATION_ID__': correlation_id
-        }
-
-        param_iterables = [
-            (lambda_client, LAMBDA_INFO['name'], dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
-            for i in range(1, concurrency)
-        ]
-
-        executor.map(invoke_lambda, param_iterables)
+        except Exception as e:
+            logger.info('Failed to invoke {} during warm up fan out'.format(LAMBDA_INFO['name']))
