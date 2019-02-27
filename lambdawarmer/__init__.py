@@ -30,7 +30,7 @@ def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False
 
             execution_info = dict(
                 instance_id=context.aws_request_id,
-                is_warmer_invocation=event.get(flag),
+                is_warmer_invocation=event.get(flag) or False,
                 **LAMBDA_INFO
             )
 
