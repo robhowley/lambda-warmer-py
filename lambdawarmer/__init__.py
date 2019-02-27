@@ -7,16 +7,19 @@ import logging
 import functools
 
 
+warmer_logger = logging.getLogger(__name__)
+
+
 LAMBDA_INFO = {
     'is_warm': False,
-    'name': os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'FAILED_TO_RETRIEVE_LAMBDA_NAME')
+    'function_name': os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'FAILED_TO_RETRIEVE_LAMBDA_NAME')
 }
 
 
-def warmer(flag='warmer', concurrency='concurrency', delay=75, **decorator_kwargs):
+def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False, **decorator_kwargs):
 
     # should only really be used in unittests w fake client
-    lambda_client = decorator_kwargs.pop('lambda_client', None)
+    get_client = decorator_kwargs.pop('get_client', None) or boto3.client
     logger = decorator_kwargs.pop('logger', None)
 
     def decorator(f):
@@ -30,16 +33,40 @@ def warmer(flag='warmer', concurrency='concurrency', delay=75, **decorator_kwarg
                 correlation_id=context.aws_request_id   # default the shared id to the request id of source lamdba
             )
 
-            warmer_fan_out(event, config=config, lambda_client=lambda_client, logger=logger)
+            log_current_state(
+                config['correlation_id'],
+                send_metric,
+                is_warmer_invocation=event.get(flag),
+                cloudwatch_client=get_client('cloudwatch'),
+                logger=logger
+            )
+
+            warmer_fan_out(event, config=config, lambda_client=get_client('lambda'), logger=logger)
 
             return f(event, context, *args, **kwargs)
         return wrapped_func
     return decorator
 
 
+def log_current_state(correlation_id, send_metric, is_warmer_invocation, logger=None, cloudwatch_client=None):
+    logger = logger or warmer_logger
+    logger.info(dict(correlation_id=correlation_id, is_warmer_invocation=is_warmer_invocation, **LAMBDA_INFO))
+
+    if send_metric:
+        cloudwatch_client = cloudwatch_client or boto3.client('cloudwatch')
+        cloudwatch_client.put_metric_data(
+            Namespace='Lambda',
+            MetricData=[dict(
+                Name='ColdStart',
+                Value=int(not LAMBDA_INFO['is_warm']),
+                Unit='None'
+            )]
+        )
+
+
 def warmer_fan_out(event, config=None, lambda_client=None, logger=None):
 
-    logger = logger or logging.getLogger(__name__)
+    logger = logger or warmer_logger
 
     state_at_invocation = LAMBDA_INFO['is_warm']
     LAMBDA_INFO['is_warm'] = True
@@ -51,16 +78,14 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None):
         correlation_id = event.get('__WARMER_CORRELATION_ID__') or config['correlation_id']
 
         logger.info(dict(
-            action='warmer',
-            function=LAMBDA_INFO['name'],
+            is_warmer_invocation=True,
+            function=LAMBDA_INFO['function_name'],
             instance_id=config['correlation_id'],
             correlation_id=correlation_id,
             count=invoke_count,
             concurrency=invoke_total,
             is_warm=state_at_invocation
         ))
-
-        LAMBDA_INFO['is_warm'] = True
 
         if concurrency > 1:
             _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client, logger)
@@ -80,9 +105,9 @@ def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_c
     for i in range(1, concurrency):
         try:
             lambda_client.invoke(
-                FunctionName=LAMBDA_INFO['name'],
+                FunctionName=LAMBDA_INFO['function_name'],
                 InvocationType='Event' if i < concurrency - 1 else 'RequestResponse',
                 Payload=json.dumps(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
             )
         except Exception as e:
-            logger.info('Failed to invoke {} during warm up fan out'.format(LAMBDA_INFO['name']))
+            logger.info('Failed to invoke {} during warm up fan out'.format(LAMBDA_INFO['function_name']))
