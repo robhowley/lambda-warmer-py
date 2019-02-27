@@ -71,9 +71,6 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None, **execut
 
     logger = logger or warmer_logger
 
-    state_at_invocation = execution_info.pop('is_warm')
-    # LAMBDA_INFO['is_warm'] = True
-
     if execution_info['is_warmer_invocation']:
         concurrency = max(event.get(config['concurrency']), 1)
         invoke_count = event.get('__WARMER_INVOCATION__') or 1
@@ -85,7 +82,6 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None, **execut
             correlation_id=correlation_id,
             count=invoke_count,
             concurrency=invoke_total,
-            is_warm=state_at_invocation,
             **execution_info
         ))
 
