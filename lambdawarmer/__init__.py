@@ -55,11 +55,12 @@ def log_current_state(correlation_id, send_metric, is_warmer_invocation, logger=
     if send_metric:
         cloudwatch_client = cloudwatch_client or boto3.client('cloudwatch')
         cloudwatch_client.put_metric_data(
-            Namespace='Lambda',
+            Namespace='LambdaWarmer',
             MetricData=[dict(
-                Name='ColdStart',
-                Value=int(not LAMBDA_INFO['is_warm']),
-                Unit='None'
+                MetricName='WarmStart' if LAMBDA_INFO['is_warm'] else 'ColdStart',
+                Dimensions=[dict(Name='By Function Name', Value='FAILED_TO_RETRIEVE_LAMBDA_NAME')],
+                Unit='None',
+                Value=1
             )]
         )
 

@@ -24,10 +24,15 @@ class TestWarmerFanOut(unittest.TestCase):
             }
         }
 
-        self.to_metric = lambda v: {
-            'Namespace': 'Lambda',
-            'MetricData': [{'Unit': 'None', 'Value': v, 'Name': 'ColdStart'}]
-        }
+        self.to_metric = lambda metric_name: dict(
+            Namespace='LambdaWarmer',
+            MetricData=[dict(
+                MetricName=metric_name,
+                Dimensions=[dict(Name='By Function Name', Value='FAILED_TO_RETRIEVE_LAMBDA_NAME')],
+                Unit='None',
+                Value=1
+            )]
+        )
 
         @warmer(get_client=get_client, logger=self.logger)
         def dummy_lambda(event, context):
@@ -74,7 +79,6 @@ class TestWarmerFanOut(unittest.TestCase):
     def test_fan_out_call_does_not_fan_out_more(self):
         invoke_call = self.to_invoke_call(2)
         self.decorared_dummy_lambda(invoke_call['payload'], get_context())
-        print(self.logger.kept_logs)
         self.assertTrue(len(self.logger.kept_logs) == 2)
         self.assertTrue(len(self.lambda_client.calls) == 0)
 
@@ -100,11 +104,11 @@ class TestWarmerFanOut(unittest.TestCase):
         fake_cw = get_client('cloudwatch')
 
         dummy_lambda({}, get_context())
-        self.assertTrue(fake_cw.calls[0], self.to_metric(1))
+        self.assertDictEqual(fake_cw.calls[0], self.to_metric('ColdStart'))
         self.assertFalse(self.logger.kept_logs[0]['is_warm'])
 
         dummy_lambda({}, get_context())
-        self.assertTrue(fake_cw.calls[1], self.to_metric(0))
+        self.assertDictEqual(fake_cw.calls[1], self.to_metric('WarmStart'))
         self.assertTrue(self.logger.kept_logs[1]['is_warm'])
 
         self.assertTrue(len(fake_cw.calls) == 2)
