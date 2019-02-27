@@ -54,11 +54,12 @@ class TestWarmerFanOut(unittest.TestCase):
         self.assertDictEqual(
             self.logger.kept_logs[1],
             {
+                'action': 'warmer',
                 'is_warmer_invocation': True,
                 'concurrency': self.warmer_invocation_event['concurrency'],
                 'correlation_id': '123',
                 'count': 1,
-                'function': 'FAILED_TO_RETRIEVE_LAMBDA_NAME',
+                'function_name': 'FAILED_TO_RETRIEVE_LAMBDA_NAME',
                 'instance_id': '123',
                 'is_warm': False
             }
