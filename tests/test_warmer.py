@@ -29,9 +29,9 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.warmer_invocation_event = dict(warmer=True, concurrency=3)
 
-        self.to_invoke_call = lambda inv_num: {
+        self.to_invoke_call = lambda inv_num, inv_type='Event': {
             'function_name': 'FAILED_TO_RETRIEVE_LAMBDA_NAME',
-            'invoke_type': 'RequestResponse',
+            'invoke_type': inv_type,
             'payload': {
                 '__WARMER_CORRELATION_ID__': '123',
                 'warmer': True,
@@ -76,7 +76,7 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.assertListEqual(
             self.lambda_client.calls,
-            [self.to_invoke_call(2), self.to_invoke_call(3)]
+            [self.to_invoke_call(2), self.to_invoke_call(3, inv_type='RequestResponse')]
         )
 
     def test_if_not_warmer_do_not_bother(self):

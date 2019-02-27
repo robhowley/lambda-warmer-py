@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
 
 setuptools.setup(
     name='lambda-warmer-py',
-    version='1.0.alpha',
+    version='0.2.0',
     author='Rob Howley',
     author_email='howley.robert@gmail.com',
     description='keep lambdas warm and monitor cold starts with a simple decorator',
@@ -18,9 +18,5 @@ setuptools.setup(
         'Programming Language :: Python :: 2',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
-    ],
-
-    install_requires={
-        "futures ; python_version == '2.7'"
-    }
+    ]
 )
