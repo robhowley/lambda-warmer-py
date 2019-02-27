@@ -11,8 +11,7 @@ starts. Just ...
 and you'll cut your cold starts way down. Configuration options are also available that allow for keeping many *concurrent*
 lambdas warm.
 
-This is a python adaption* of the `npm` [package](https://github.com/jeremydaly/lambda-warmer) `lambda-warmer` by 
-Jeremy Daly. Read more about the background to this approach on his site [here](https://www.jeremydaly.com/lambda-warmer-optimize-aws-lambda-function-cold-starts/)
+This is a python adaption* of the `js` [package](https://github.com/jeremydaly/lambda-warmer), `lambda-warmer`. Read more about the background to this approach on his site [here](https://www.jeremydaly.com/lambda-warmer-optimize-aws-lambda-function-cold-starts/)
 and some best practices on lambda optimization [here](https://www.jeremydaly.com/15-key-takeaways-from-the-serverless-talk-at-aws-startup-day/).
 
 \* There are some small differences. See [configuration](#configuration).
