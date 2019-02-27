@@ -65,6 +65,6 @@ Name of the field used to indicate that it is a warm up event.
 ### `concurrency (string, default = 'concurrency')`
 Name of the field used to set the number of concurrent lambdas to invoke and keep warm.
 
-### `delay (string, int = 1)`
+### `delay (string, int = 75)`
 Number of millis a concurrent warm up invocation should sleep. This helps avoid under delivering on
   the concurrency target.
