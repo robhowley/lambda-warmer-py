@@ -14,15 +14,6 @@ LAMBDA_INFO = {
 }
 
 
-# def invoke_lambda(parameter_tuple):
-#     lambda_client, function_name, invocation_type_string, payload = parameter_tuple
-#     lambda_client.invoke(
-#         FunctionName=function_name,
-#         InvocationType=invocation_type_string,
-#         Payload=json.dumps(payload)
-#     )
-
-
 def warmer(flag='warmer', concurrency='concurrency', **decorator_kwargs):
 
     # should only really be used in unittests w fake client
@@ -74,32 +65,34 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None):
         LAMBDA_INFO['is_warm'] = True
 
         if concurrency > 1:
-            with ThreadPoolExecutor(max_workers=concurrency) as executor:
-                lambda_client = lambda_client or boto3.client('lambda')
-
-                def invoke_lambda(parameter_tuple):
-                    lambda_client, function_name, invocation_type_string, payload = parameter_tuple
-                    lambda_client.invoke(
-                        FunctionName=function_name,
-                        InvocationType=invocation_type_string,
-                        Payload=json.dumps(payload)
-                    )
-
-                base_payload = {
-                    config['flag']: True,
-                    '__WARMER_CONCURRENCY__': concurrency,
-                    '__WARMER_CORRELATION_ID__': correlation_id
-                }
-
-                to_param_tuple = lambda payload: (lambda_client, LAMBDA_INFO['name'], 'RequestResponse', payload)
-
-                param_iterables = [
-                    to_param_tuple(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
-                    for i in range(1, concurrency)
-                ]
-
-                executor.map(invoke_lambda, param_iterables)
-
+            _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client)
         elif invoke_count > 1:
-            # if you don't delay, you might just get a reused container
-            time.sleep(config['delay'] / 1000.0)
+            time.sleep(config['delay'] / 1000.0)        # without delay, you might just get a reused container
+
+
+def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client):
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        lambda_client = lambda_client or boto3.client('lambda')
+
+        def invoke_lambda(parameter_tuple):
+            lambda_client, function_name, invocation_type_string, payload = parameter_tuple
+            lambda_client.invoke(
+                FunctionName=function_name,
+                InvocationType=invocation_type_string,
+                Payload=json.dumps(payload)
+            )
+
+        base_payload = {
+            config['flag']: True,
+            '__WARMER_CONCURRENCY__': concurrency,
+            '__WARMER_CORRELATION_ID__': correlation_id
+        }
+
+        to_param_tuple = lambda payload: (lambda_client, LAMBDA_INFO['name'], 'RequestResponse', payload)
+
+        param_iterables = [
+            to_param_tuple(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
+            for i in range(1, concurrency)
+        ]
+
+        executor.map(invoke_lambda, param_iterables)
