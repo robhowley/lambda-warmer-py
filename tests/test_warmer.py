@@ -34,9 +34,11 @@ class TestWarmerFanOut(unittest.TestCase):
             )]
         )
 
+        self.lambda_return_value = 'return-val'
+
         @warmer(get_client=get_client, logger=self.logger)
         def dummy_lambda(event, context):
-            pass
+            return self.lambda_return_value
 
         self.decorared_dummy_lambda = dummy_lambda
 
@@ -47,8 +49,9 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.assertFalse(LAMBDA_INFO['is_warm'])
 
-        self.decorared_dummy_lambda(self.warmer_invocation_event, get_context())
+        lambda_return_val = self.decorared_dummy_lambda(self.warmer_invocation_event, get_context())
 
+        self.assertIsNone(lambda_return_val)
         self.assertTrue(LAMBDA_INFO['is_warm'])
 
         self.assertDictEqual(
@@ -73,7 +76,8 @@ class TestWarmerFanOut(unittest.TestCase):
         )
 
     def test_if_not_warmer_do_not_bother(self):
-        self.decorared_dummy_lambda({}, get_context())
+        lambda_return_val = self.decorared_dummy_lambda({}, get_context())
+        self.assertEqual(lambda_return_val, self.lambda_return_value)
         self.assertTrue(len(self.logger.kept_logs) == 1)
         self.assertTrue(len(self.lambda_client.calls) == 0)
 

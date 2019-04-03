@@ -43,9 +43,12 @@ def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False
 
             LAMBDA_INFO['is_warm'] = True
 
-            warmer_fan_out(event, config=config, lambda_client=get_client('lambda'), logger=logger, **execution_info)
+            if execution_info['is_warmer_invocation']:
+                lambda_client = get_client('lambda')
+                warmer_fan_out(event, config=config, lambda_client=lambda_client, logger=logger, **execution_info)
+            else:
+                return f(event, context, *args, **kwargs)
 
-            return f(event, context, *args, **kwargs)
         return wrapped_func
     return decorator
 
@@ -71,24 +74,23 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None, **execut
 
     logger = logger or warmer_logger
 
-    if execution_info['is_warmer_invocation']:
-        concurrency = max(event.get(config['concurrency']), 1)
-        invoke_count = event.get('__WARMER_INVOCATION__') or 1
-        invoke_total = event.get('__WARMER_CONCURRENCY__') or concurrency
-        correlation_id = event.get('__WARMER_CORRELATION_ID__') or execution_info['instance_id']
+    concurrency = max(event.get(config['concurrency']), 1)
+    invoke_count = event.get('__WARMER_INVOCATION__') or 1
+    invoke_total = event.get('__WARMER_CONCURRENCY__') or concurrency
+    correlation_id = event.get('__WARMER_CORRELATION_ID__') or execution_info['instance_id']
 
-        logger.info(dict(
-            action='warmer',
-            correlation_id=correlation_id,
-            count=invoke_count,
-            concurrency=invoke_total,
-            **execution_info
-        ))
+    logger.info(dict(
+        action='warmer',
+        correlation_id=correlation_id,
+        count=invoke_count,
+        concurrency=invoke_total,
+        **execution_info
+    ))
 
-        if concurrency > 1:
-            _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client, logger)
-        elif invoke_count > 1:
-            time.sleep(config['delay'] / 1000.0)        # without delay, you might just get a reused container
+    if concurrency > 1:
+        _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client, logger)
+    elif invoke_count > 1:
+        time.sleep(config['delay'] / 1000.0)        # without delay, you might just get a reused container
 
 
 def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client, logger):
