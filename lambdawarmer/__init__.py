@@ -74,7 +74,7 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None, **execut
 
     logger = logger or warmer_logger
 
-    concurrency = max(event.get(config['concurrency']), 1)
+    concurrency = max(event.get(config['concurrency']) or 1, 1)
     invoke_count = event.get('__WARMER_INVOCATION__') or 1
     invoke_total = event.get('__WARMER_CONCURRENCY__') or concurrency
     correlation_id = event.get('__WARMER_CORRELATION_ID__') or execution_info['instance_id']
