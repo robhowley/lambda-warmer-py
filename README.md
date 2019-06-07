@@ -60,7 +60,7 @@ to send metric data to CloudWatch. The required policy action is
 ## Warming your lambdas
 Create a [CloudWatch Rule](https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/RunLambdaSchedule.html) that 
 periodically invokes your lambda directly and passes the following json as the event
-```bash
+```python
 {
     "warmer": true,
     "concurrency": (int, defaults to 1)
@@ -88,13 +88,13 @@ are `ColdStart` and `WarmStart`, are recorded under `LambdaWarmer` namespace, an
   
 #### Example of configuration overrides
 Using alternative event and delay configurations is straightforward.
-```bash
+```python
 @lambdawarmer.warmer(flag='am_i_a_warmer', concurrency='how_many_lambdas', delay=150)
 def your_lambda_function(event, context):
     pass
 ```
 This implementation will expect events of the form
-```bash
+```python
 {"am_i_a_warmer": true, "how_many_lambdas": (int)}
 ```
 and all concurrent executions will delay for 150 milliseconds.
