@@ -14,7 +14,7 @@ class TestWarmerFanOut(unittest.TestCase):
         self.warmer_invocation_event = dict(warmer=True, concurrency=3)
 
         self.to_invoke_call = lambda inv_num, inv_type='Event': {
-            'function_name': 'FAILED_TO_RETRIEVE_LAMBDA_NAME',
+            'function_name': 'FAILED_TO_RETRIEVE_LAMBDA_NAME:FAILED_TO_RETRIEVE_LAMBDA_VERSION',
             'invoke_type': inv_type,
             'payload': {
                 '__WARMER_CORRELATION_ID__': '123',
@@ -63,6 +63,7 @@ class TestWarmerFanOut(unittest.TestCase):
                 'correlation_id': '123',
                 'count': 1,
                 'function_name': 'FAILED_TO_RETRIEVE_LAMBDA_NAME',
+                'function_version': 'FAILED_TO_RETRIEVE_LAMBDA_VERSION',
                 'instance_id': '123',
                 'is_warm': False
             }
