@@ -106,7 +106,7 @@ def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_c
     for i in range(1, concurrency):
         try:
             lambda_client.invoke(
-                FunctionName='%s:%s' % (LAMBDA_INFO['function_name'], LAMBDA_INFO['function_version']),
+                FunctionName='{function_name}:{function_version}'.format(**LAMBDA_INFO),
                 InvocationType='Event' if i < concurrency - 1 else 'RequestResponse',
                 Payload=json.dumps(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
             )
