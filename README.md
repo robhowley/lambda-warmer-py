@@ -86,7 +86,7 @@ Number of millis a concurrent warm up invocation should sleep. This helps avoid 
 Whether or not CloudWatch Metrics for the number of cold/warm starts will be sent at each invocation. The metrics names
 are `ColdStart` and `WarmStart`, are recorded under `LambdaWarmer` namespace, and can be filtered by lambda function name.
   
-#### Example of configuration overrides
+#### Example: warmer configuration overrides
 Using alternative event and delay configurations is straightforward.
 ```python
 @lambdawarmer.warmer(flag='am_i_a_warmer', concurrency='how_many_lambdas', delay=150)
@@ -98,6 +98,14 @@ This implementation will expect events of the form
 {"am_i_a_warmer": true, "how_many_lambdas": (int)}
 ```
 and all concurrent executions will delay for 150 milliseconds.
+
+#### Example: sending metrics
+If you want to track metrics on number of warm/cold starts activate that functionality in the decorator.
+```python
+@lambdawarmer.warmer(send_metric=True)
+def your_lambda_function(event, context):
+    pass
+```
 
 *Note*: Configuration options that are *excluded* from this implementation but can be found in the `js` version are 
 * `test`: Testing is handled in the unittests using mocks/fakes instead of flagged invocations
