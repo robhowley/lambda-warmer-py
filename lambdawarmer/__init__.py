@@ -97,6 +97,7 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None, **execut
 def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client, logger):
     lambda_client = lambda_client or boto3.client('lambda')
 
+    function_name = '{function_name}:{function_version}'.format(**LAMBDA_INFO)
     base_payload = {
         config['flag']: True,
         '__WARMER_CONCURRENCY__': concurrency,
@@ -106,9 +107,9 @@ def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_c
     for i in range(1, concurrency):
         try:
             lambda_client.invoke(
-                FunctionName='{function_name}:{function_version}'.format(**LAMBDA_INFO),
+                FunctionName=function_name,
                 InvocationType='Event' if i < concurrency - 1 else 'RequestResponse',
                 Payload=json.dumps(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
             )
         except Exception as e:
-            logger.info('Failed to invoke {} during warm up fan out: "{}"'.format(LAMBDA_INFO['function_name'], str(e)))
+            logger.info('Failed to invoke {} during warm up fan out: "{}"'.format(function_name, str(e)))
