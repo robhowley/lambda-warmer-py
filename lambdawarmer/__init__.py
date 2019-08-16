@@ -112,4 +112,4 @@ def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_c
                 Payload=json.dumps(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
             )
         except Exception as e:
-            logger.info('Failed to invoke {} during warm up fan out: "{}"'.format(function_name, str(e)))
+            logger.error('Failed to invoke {} during warm up fan out: "{}"'.format(function_name, str(e)))
