@@ -106,10 +106,16 @@ def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_c
 
     for i in range(1, concurrency):
         try:
+            invocation_payload = json.dumps(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
             lambda_client.invoke(
                 FunctionName=function_name,
                 InvocationType='Event' if i < concurrency - 1 else 'RequestResponse',
-                Payload=json.dumps(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
+                Payload=invocation_payload
             )
         except Exception as e:
-            logger.error('Failed to invoke {} during warm up fan out: "{}"'.format(function_name, str(e)))
+            logger.error(
+                'Failed to invoke "%s" with event "%s" during warm up fan out. Error: "%s"',
+                function_name,
+                invocation_payload,
+                str(e)
+            )
