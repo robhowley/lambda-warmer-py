@@ -114,8 +114,9 @@ def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_c
             )
         except Exception as e:
             logger.error(
-                'Failed to invoke "%s" with event "%s" during warm up fan out. Error: "%s"',
-                function_name,
-                invocation_payload,
-                str(e)
+                'Failed to invoke "{}" with event "{}" during warm up fan out. Error: "{}"'.format(
+                    function_name,
+                    invocation_payload,
+                    str(e)
+                )
             )
