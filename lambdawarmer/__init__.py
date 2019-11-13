@@ -8,6 +8,9 @@ import functools
 from boto3 import client as boto3_client
 
 
+__version__ = '0.5.1'
+
+
 logger = logging.getLogger(__name__)
 
 
