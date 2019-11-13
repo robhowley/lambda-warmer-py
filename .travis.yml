@@ -1,0 +1,11 @@
+sudo: false
+
+language: python
+
+python: 3.0
+
+install:
+- pip install lambdawarmer
+
+script:
+- python -m unittest discover
