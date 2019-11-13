@@ -2,12 +2,16 @@
 import os
 import json
 import time
-import boto3
 import logging
 import functools
 
+from boto3 import client as boto3_client
 
-warmer_logger = logging.getLogger(__name__)
+
+__version__ = '0.5.1'
+
+
+logger = logging.getLogger(__name__)
 
 
 LAMBDA_INFO = {
@@ -21,10 +25,6 @@ def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False
 
     config = dict(flag=flag, concurrency=concurrency, delay=delay, send_metric=send_metric)
 
-    # should only really be used in unittests w fake client
-    get_client = decorator_kwargs.pop('get_client', None) or boto3.client
-    logger = decorator_kwargs.pop('logger', None)
-
     def decorator(f):
         @functools.wraps(f)
         def wrapped_func(event, context, *args, **kwargs):
@@ -35,18 +35,12 @@ def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False
                 **LAMBDA_INFO
             )
 
-            log_current_state(
-                send_metric,
-                cloudwatch_client=get_client('cloudwatch'),
-                logger=logger,
-                **execution_info
-            )
+            log_current_state(send_metric, **execution_info)
 
             LAMBDA_INFO['is_warm'] = True
 
             if execution_info['is_warmer_invocation']:
-                lambda_client = get_client('lambda')
-                warmer_fan_out(event, config=config, lambda_client=lambda_client, logger=logger, **execution_info)
+                warmer_fan_out(event, config=config, **execution_info)
             else:
                 return f(event, context, *args, **kwargs)
 
@@ -54,13 +48,11 @@ def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False
     return decorator
 
 
-def log_current_state(send_metric, logger=None, cloudwatch_client=None, **execution_info):
-    logger = logger or warmer_logger
+def log_current_state(send_metric, **execution_info):
     logger.info(execution_info)
 
     if send_metric:
-        cloudwatch_client = cloudwatch_client or boto3.client('cloudwatch')
-        cloudwatch_client.put_metric_data(
+        boto3_client('cloudwatch').put_metric_data(
             Namespace='LambdaWarmer',
             MetricData=[dict(
                 MetricName='WarmStart' if execution_info['is_warm'] else 'ColdStart',
@@ -71,9 +63,7 @@ def log_current_state(send_metric, logger=None, cloudwatch_client=None, **execut
         )
 
 
-def warmer_fan_out(event, config=None, lambda_client=None, logger=None, **execution_info):
-
-    logger = logger or warmer_logger
+def warmer_fan_out(event, config=None, **execution_info):
 
     concurrency = max(event.get(config['concurrency']) or 1, 1)
     invoke_count = event.get('__WARMER_INVOCATION__') or 1
@@ -89,14 +79,12 @@ def warmer_fan_out(event, config=None, lambda_client=None, logger=None, **execut
     ))
 
     if concurrency > 1:
-        _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client, logger)
+        _perform_fan_out_warm_up_calls(config, correlation_id, concurrency)
     elif invoke_count > 1:
         time.sleep(config['delay'] / 1000.0)        # without delay, you might just get a reused container
 
 
-def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_client, logger):
-    lambda_client = lambda_client or boto3.client('lambda')
-
+def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency):
     function_name = '{function_name}:{function_version}'.format(**LAMBDA_INFO)
     base_payload = {
         config['flag']: True,
@@ -106,8 +94,8 @@ def _perform_fan_out_warm_up_calls(config, correlation_id, concurrency, lambda_c
 
     for i in range(1, concurrency):
         try:
-            invocation_payload = json.dumps(dict(base_payload, __WARMER_INVOCATION__=(i + 1)))
-            lambda_client.invoke(
+            invocation_payload = json.dumps(dict(base_payload, __WARMER_INVOCATION__=(i + 1)), sort_keys=True)
+            boto3_client('lambda').invoke(
                 FunctionName=function_name,
                 InvocationType='Event' if i < concurrency - 1 else 'RequestResponse',
                 Payload=invocation_payload
