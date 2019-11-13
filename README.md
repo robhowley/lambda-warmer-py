@@ -1,5 +1,5 @@
 [![PyPI version](https://badge.fury.io/py/lambda-warmer-py.svg)](https://badge.fury.io/py/lambda-warmer-py)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Build Status](https://travis-ci.com/robhowley/lambda-warmer-py.svg?branch=master)](https://travis-ci.com/robhowley/lambda-warmer-py)
 
 # lambda-warmer-py: taking care of aws lambda cold starts
 The `lambda-warmer-py` package contains a single decorator that makes it easy to minimize the drag of aws lambda cold 
