@@ -1,27 +1,31 @@
 import json
+import logging
 import unittest
+from unittest.mock import MagicMock, patch, call
+
 from lambdawarmer import warmer
-from lambdawarmer.fakes import get_context, get_client
 
 
 class TestWarmerFanOut(unittest.TestCase):
+    def get_mock_context(self, req_id='123'):
+        return MagicMock(aws_request_id=req_id)
+
     def setUp(self):
         from lambdawarmer import LAMBDA_INFO
-        from lambdawarmer.fakes import FakeLogger
 
-        self.lambda_client, self.logger = get_client('lambda'), FakeLogger()
+        LAMBDA_INFO['is_warm'] = False
 
         self.warmer_invocation_event = dict(warmer=True, concurrency=3)
 
         self.to_invoke_call = lambda inv_num, inv_type='Event': {
-            'function_name': 'FAILED_TO_RETRIEVE_LAMBDA_NAME:FAILED_TO_RETRIEVE_LAMBDA_VERSION',
-            'invoke_type': inv_type,
-            'payload': {
+            'FunctionName': 'FAILED_TO_RETRIEVE_LAMBDA_NAME:FAILED_TO_RETRIEVE_LAMBDA_VERSION',
+            'InvocationType': inv_type,
+            'Payload': json.dumps({
                 '__WARMER_CORRELATION_ID__': '123',
                 'warmer': True,
                 '__WARMER_CONCURRENCY__': self.warmer_invocation_event['concurrency'],
                 '__WARMER_INVOCATION__': inv_num
-            }
+            }, sort_keys=True)
         }
 
         self.to_metric = lambda metric_name: dict(
@@ -36,27 +40,32 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.lambda_return_value = 'return-val'
 
-        @warmer(get_client=get_client, logger=self.logger)
+        @warmer()
         def dummy_lambda(event, context):
             return self.lambda_return_value
 
         self.decorared_dummy_lambda = dummy_lambda
 
-        LAMBDA_INFO['is_warm'] = False
-
-    def test_warmer_fan_out(self):
+    @patch('lambdawarmer.boto3_client')
+    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    def test_warmer_fan_out(self, mock_logger, mock_boto3_client):
         from lambdawarmer import LAMBDA_INFO
+
+        lambda_client = MagicMock()
+        mock_boto3_client.return_value = lambda_client
 
         self.assertFalse(LAMBDA_INFO['is_warm'])
 
-        lambda_return_val = self.decorared_dummy_lambda(self.warmer_invocation_event, get_context())
+        lambda_return_val = self.decorared_dummy_lambda(self.warmer_invocation_event, self.get_mock_context())
+
+        self.assertListEqual(mock_boto3_client.call_args_list, 2*[call('lambda')])
 
         self.assertIsNone(lambda_return_val)
         self.assertTrue(LAMBDA_INFO['is_warm'])
 
-        self.assertDictEqual(
-            self.logger.kept_logs[1],
-            {
+        self.assertEqual(
+            mock_logger.call_args_list[1],
+            call({
                 'action': 'warmer',
                 'is_warmer_invocation': True,
                 'concurrency': self.warmer_invocation_event['concurrency'],
@@ -66,58 +75,70 @@ class TestWarmerFanOut(unittest.TestCase):
                 'function_version': 'FAILED_TO_RETRIEVE_LAMBDA_VERSION',
                 'instance_id': '123',
                 'is_warm': False
-            }
+            })
         )
 
-        [c.update(payload=json.loads(c['payload'])) for c in self.lambda_client.calls]
-
-        self.assertListEqual(
-            self.lambda_client.calls,
-            [self.to_invoke_call(2), self.to_invoke_call(3, inv_type='RequestResponse')]
+        self.assertEqual(
+            lambda_client.invoke.call_args_list,
+            [call(**self.to_invoke_call(2)), call(**self.to_invoke_call(3, inv_type='RequestResponse'))]
         )
 
-    def test_if_not_warmer_do_not_bother(self):
-        lambda_return_val = self.decorared_dummy_lambda({}, get_context())
+    @patch('lambdawarmer.boto3_client')
+    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    def test_if_not_warmer_do_not_bother(self, mock_logger, mock_boto3_client):
+        lambda_return_val = self.decorared_dummy_lambda({}, self.get_mock_context())
         self.assertEqual(lambda_return_val, self.lambda_return_value)
-        self.assertTrue(len(self.logger.kept_logs) == 1)
-        self.assertTrue(len(self.lambda_client.calls) == 0)
+        self.assertTrue(len(mock_logger.call_args_list) == 1)
+        mock_boto3_client.assert_not_called()
 
-    def test_fan_out_call_does_not_fan_out_more(self):
+    @patch('lambdawarmer.boto3_client')
+    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    def test_fan_out_call_does_not_fan_out_more(self, mock_logger, mock_boto3_client):
         invoke_call = self.to_invoke_call(2)
-        self.decorared_dummy_lambda(invoke_call['payload'], get_context())
-        self.assertTrue(len(self.logger.kept_logs) == 2)
-        self.assertTrue(len(self.lambda_client.calls) == 0)
+        self.decorared_dummy_lambda(json.loads(invoke_call['Payload']), self.get_mock_context())
+        self.assertTrue(len(mock_logger.call_args_list) == 2)
+        mock_boto3_client.assert_not_called()
 
-    def test_event_key_renaming(self):
+    @patch('lambdawarmer.boto3_client')
+    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    def test_event_key_renaming(self, *args):
         from lambdawarmer import LAMBDA_INFO
 
-        @warmer(warmer='not_w', concurrency='not_c', get_client=get_client, logger=self.logger)
+        @warmer(warmer='not_w', concurrency='not_c')
         def dummy_lambda(event, context):
             pass
 
         self.assertFalse(LAMBDA_INFO['is_warm'])
 
-        dummy_lambda(dict(not_w=True, not_c=2), get_context())
+        dummy_lambda(dict(not_w=True, not_c=2), self.get_mock_context())
 
         self.assertTrue(LAMBDA_INFO['is_warm'])
 
-    def test_logging_current_state(self):
+    @patch('lambdawarmer.boto3_client')
+    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    def test_logging_current_state(self, mock_logger, mock_boto3_client):
 
-        @warmer(send_metric=True, get_client=get_client, logger=self.logger)
+        @warmer(send_metric=True)
         def dummy_lambda(event, context):
             pass
 
-        fake_cw = get_client('cloudwatch')
+        mock_cloudwatch_client = MagicMock()
+        mock_boto3_client.return_value = mock_cloudwatch_client
 
-        dummy_lambda({}, get_context())
-        self.assertDictEqual(fake_cw.calls[0], self.to_metric('ColdStart'))
-        self.assertFalse(self.logger.kept_logs[0]['is_warm'])
+        dummy_lambda({}, self.get_mock_context())
 
-        dummy_lambda({}, get_context())
-        self.assertDictEqual(fake_cw.calls[1], self.to_metric('WarmStart'))
-        self.assertTrue(self.logger.kept_logs[1]['is_warm'])
+        mock_boto3_client.assert_called_once_with('cloudwatch')
+        mock_cloudwatch_client.put_metric_data.assert_called_once_with(**self.to_metric('ColdStart'))
+        self.assertFalse(mock_logger.call_args_list[0][0][0]['is_warm'])
 
-        self.assertTrue(len(fake_cw.calls) == 2)
+        dummy_lambda({}, self.get_mock_context())
+        self.assertEqual(
+            mock_cloudwatch_client.put_metric_data.call_args_list[1],
+            call(**self.to_metric('WarmStart'))
+        )
+        self.assertTrue(mock_logger.call_args_list[1][0][0]['is_warm'])
+
+        self.assertTrue(len(mock_logger.call_args_list) == 2)
 
 
 if __name__ == '__main__':
