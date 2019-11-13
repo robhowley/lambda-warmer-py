@@ -6,6 +6,11 @@ from unittest.mock import MagicMock, patch, call
 from lambdawarmer import warmer
 
 
+patch_boto = patch('lambdawarmer.boto3_client')
+patch_info_logger = patch.object(logging.getLogger('lambdawarmer'), 'info')
+inject_mocks = lambda f: patch_boto(patch_info_logger(f))
+
+
 class TestWarmerFanOut(unittest.TestCase):
     def get_mock_context(self, req_id='123'):
         return MagicMock(aws_request_id=req_id)
@@ -47,10 +52,9 @@ class TestWarmerFanOut(unittest.TestCase):
 
             return dummy_lambda
 
-        self.get_decorated_lambda = dummy_lambda
+        self.get_decorated_lambda = _get_decorated_lambda
 
-    @patch('lambdawarmer.boto3_client')
-    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    @inject_mocks
     def test_warmer_fan_out(self, mock_logger, mock_boto3_client):
         from lambdawarmer import LAMBDA_INFO
 
@@ -86,24 +90,21 @@ class TestWarmerFanOut(unittest.TestCase):
             [call(**self.to_invoke_call(2)), call(**self.to_invoke_call(3, inv_type='RequestResponse'))]
         )
 
-    @patch('lambdawarmer.boto3_client')
-    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    @inject_mocks
     def test_if_not_warmer_do_not_bother(self, mock_logger, mock_boto3_client):
         lambda_return_val = self.get_decorated_lambda()({}, self.get_mock_context())
         self.assertEqual(lambda_return_val, self.lambda_return_value)
         self.assertTrue(len(mock_logger.call_args_list) == 1)
         mock_boto3_client.assert_not_called()
 
-    @patch('lambdawarmer.boto3_client')
-    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    @inject_mocks
     def test_fan_out_call_does_not_fan_out_more(self, mock_logger, mock_boto3_client):
         invoke_call = self.to_invoke_call(2)
         self.get_decorated_lambda()(json.loads(invoke_call['Payload']), self.get_mock_context())
         self.assertTrue(len(mock_logger.call_args_list) == 2)
         mock_boto3_client.assert_not_called()
 
-    @patch('lambdawarmer.boto3_client')
-    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    @inject_mocks
     def test_event_key_renaming(self, *args):
         from lambdawarmer import LAMBDA_INFO
 
@@ -114,8 +115,7 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.assertTrue(LAMBDA_INFO['is_warm'])
 
-    @patch('lambdawarmer.boto3_client')
-    @patch.object(logging.getLogger('lambdawarmer'), 'info')
+    @inject_mocks
     def test_logging_current_state(self, mock_logger, mock_boto3_client):
 
         decorated_lambda = self.get_decorated_lambda(send_metric=True)
