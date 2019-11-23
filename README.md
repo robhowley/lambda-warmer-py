@@ -35,7 +35,7 @@ Incorporating the lambda warmer into your existing lambdas only requires adding 
 import lambdawarmer
 
 
-@lambdawarmer.warmer()
+@lambdawarmer.warmer
 def your_lambda_function(event, context):
     pass
 ```
