@@ -8,7 +8,7 @@ import functools
 from boto3 import client as boto3_client
 
 
-__version__ = '0.5.1'
+__version__ = '0.6.0'
 
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ LAMBDA_INFO = {
 }
 
 
-def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False, **decorator_kwargs):
+def warmer(func=None, *, flag='warmer', concurrency='concurrency', delay=75, send_metric=False):
 
     config = dict(flag=flag, concurrency=concurrency, delay=delay, send_metric=send_metric)
 
@@ -35,7 +35,10 @@ def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False
                 **LAMBDA_INFO
             )
 
-            log_current_state(send_metric, **execution_info)
+            logger.info(execution_info)
+
+            if send_metric:
+                log_current_state(**execution_info)
 
             LAMBDA_INFO['is_warm'] = True
 
@@ -45,22 +48,20 @@ def warmer(flag='warmer', concurrency='concurrency', delay=75, send_metric=False
                 return f(event, context, *args, **kwargs)
 
         return wrapped_func
-    return decorator
+
+    return decorator(func) if func is not None and callable(func) else decorator
 
 
-def log_current_state(send_metric, **execution_info):
-    logger.info(execution_info)
-
-    if send_metric:
-        boto3_client('cloudwatch').put_metric_data(
-            Namespace='LambdaWarmer',
-            MetricData=[dict(
-                MetricName='WarmStart' if execution_info['is_warm'] else 'ColdStart',
-                Dimensions=[dict(Name='By Function Name', Value=execution_info['function_name'])],
-                Unit='None',
-                Value=1
-            )]
-        )
+def log_current_state(**execution_info):
+    boto3_client('cloudwatch').put_metric_data(
+        Namespace='LambdaWarmer',
+        MetricData=[dict(
+            MetricName='WarmStart' if execution_info['is_warm'] else 'ColdStart',
+            Dimensions=[dict(Name='By Function Name', Value=execution_info['function_name'])],
+            Unit='None',
+            Value=1
+        )]
+    )
 
 
 def warmer_fan_out(event, config=None, **execution_info):
