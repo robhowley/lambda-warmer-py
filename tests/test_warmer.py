@@ -121,7 +121,10 @@ class TestWarmerFanOut(unittest.TestCase):
         self.assertFalse(LAMBDA_INFO['is_warm'])
 
         decorated_lambda = self.get_decorated_lambda(flag='not_w', concurrency='not_c')
-        decorated_lambda(dict(not_w=True, not_c=2), self.get_mock_context())
+
+        with patch('lambdawarmer.warmer_fan_out') as mock_warmer_fan_out:
+            decorated_lambda(dict(not_w=True, not_c=2), self.get_mock_context())
+            mock_warmer_fan_out.assert_called_once()
 
         self.assertTrue(LAMBDA_INFO['is_warm'])
 
