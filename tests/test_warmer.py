@@ -55,7 +55,7 @@ class TestWarmerFanOut(unittest.TestCase):
         self.get_decorated_lambda = _get_decorated_lambda
 
     @inject_mocks
-    def test_warmer_fan_out(self, mock_logger, mock_boto3_client):
+    def run_default_warmer_usage_tests(self, decorated_lambda, mock_logger, mock_boto3_client):
         from lambdawarmer import LAMBDA_INFO
 
         lambda_client = MagicMock()
@@ -63,9 +63,9 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.assertFalse(LAMBDA_INFO['is_warm'])
 
-        lambda_return_val = self.get_decorated_lambda()(self.warmer_invocation_event, self.get_mock_context())
+        lambda_return_val = decorated_lambda(self.warmer_invocation_event, self.get_mock_context())
 
-        self.assertListEqual(mock_boto3_client.call_args_list, 2*[call('lambda')])
+        self.assertListEqual(mock_boto3_client.call_args_list, 2 * [call('lambda')])
 
         self.assertIsNone(lambda_return_val)
         self.assertTrue(LAMBDA_INFO['is_warm'])
@@ -90,6 +90,16 @@ class TestWarmerFanOut(unittest.TestCase):
             [call(**self.to_invoke_call(2)), call(**self.to_invoke_call(3, inv_type='RequestResponse'))]
         )
 
+    def test_warmer_fan_out(self):
+        self.run_default_warmer_usage_tests(self.get_decorated_lambda())
+
+    def test_no_parens_decorator(self):
+        @warmer
+        def dummy_lambda(event, context):
+            return return_value
+
+        self.run_default_warmer_usage_tests(dummy_lambda)
+
     @inject_mocks
     def test_if_not_warmer_do_not_bother(self, mock_logger, mock_boto3_client):
         lambda_return_val = self.get_decorated_lambda()({}, self.get_mock_context())
@@ -110,7 +120,7 @@ class TestWarmerFanOut(unittest.TestCase):
 
         self.assertFalse(LAMBDA_INFO['is_warm'])
 
-        decorated_lambda = self.get_decorated_lambda(warmer='not_w', concurrency='not_c')
+        decorated_lambda = self.get_decorated_lambda(flag='not_w', concurrency='not_c')
         decorated_lambda(dict(not_w=True, not_c=2), self.get_mock_context())
 
         self.assertTrue(LAMBDA_INFO['is_warm'])
