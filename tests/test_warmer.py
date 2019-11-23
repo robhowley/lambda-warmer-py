@@ -124,7 +124,7 @@ class TestWarmerFanOut(unittest.TestCase):
 
         with patch('lambdawarmer.warmer_fan_out') as mock_warmer_fan_out:
             decorated_lambda(dict(not_w=True, not_c=2), self.get_mock_context())
-            mock_warmer_fan_out.assert_called_once()
+            self.assertTrue(len(mock_warmer_fan_out.call_args_list) == 1)
 
         self.assertTrue(LAMBDA_INFO['is_warm'])
 
