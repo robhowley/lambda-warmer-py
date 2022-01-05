@@ -40,6 +40,21 @@ def your_lambda_function(event, context):
     pass
 ```
 
+If your handler is not a function (for example, if you use Mangum), just wrap its invocation in a function.
+```python
+from fastapi import FastAPI
+from mangum import Mangum
+import lambdawarmer
+
+app = FastAPI()
+
+handler = Mangum(app)
+
+@lambdawarmer.warmer
+def your_lambda_function(event, context):
+    return handler(event, context)
+```
+
 ### Concurrent warming
 To leverage the concurrency options, the package will invoke your lambda multiple times. This means that the deployed
 lambda will need the following permissions
